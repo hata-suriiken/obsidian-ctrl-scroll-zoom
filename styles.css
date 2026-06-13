@@ -1,0 +1,7 @@
+.ctrl-scroll-zoom-status {
+  cursor: pointer;
+}
+
+.ctrl-scroll-zoom-hidden {
+  display: none;
+}

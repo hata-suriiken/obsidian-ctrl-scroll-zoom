@@ -1,0 +1,10 @@
+{
+  "id": "ctrl-scroll-zoom",
+  "name": "Ctrl+Scroll Zoom",
+  "version": "1.0.2",
+  "minAppVersion": "1.4.0",
+  "description": "Zoom the whole app in and out with Ctrl + mouse wheel (scroll up to zoom in, down to zoom out), like a browser. Trackpad pinch-to-zoom works too.",
+  "author": "hata-suriiken",
+  "authorUrl": "https://github.com/hata-suriiken",
+  "isDesktopOnly": true
+}
