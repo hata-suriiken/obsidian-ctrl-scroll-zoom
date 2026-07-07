@@ -61,6 +61,9 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     this._attachedWindows = new WeakSet();
     this._gestureZoom = null;
     this._gestureTime = 0;
+    this._alive = true;
+    this._hookedPdfBuses = new WeakSet();
+    this._pdfBusListeners = [];
     await this.loadSettings();
 
     // Restore the zoom factor from the previous session.
@@ -72,7 +75,7 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     this.statusEl = this.addStatusBarItem();
     this.statusEl.addClass('ctrl-scroll-zoom-status');
     this.statusEl.setAttribute('aria-label', 'Click to reset zoom to 100%');
-    this.registerDomEvent(this.statusEl, 'click', () => this.setZoom(1.0));
+    this.registerDomEvent(this.statusEl, 'click', () => this.resetAllZoom());
     this.updateStatusBar();
 
     // Wheel handler on the main window, every existing pop-out window, and
@@ -83,6 +86,8 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
         const win = leaf.view?.containerEl?.ownerDocument?.defaultView;
         if (win) this.attachToWindow(win);
       });
+      this.hookActivePdf();
+      this.updateStatusBar();
     });
     this.registerEvent(
       this.app.workspace.on('window-open', (workspaceWindow) => {
@@ -94,6 +99,15 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     // change always fires a resize, so re-sync the indicator (and persist the
     // new factor) whenever that happens.
     this.registerDomEvent(window, 'resize', () => this.syncFromWebFrame());
+
+    // When a PDF becomes active, watch its own zoom so the status bar can
+    // show it (PDFs zoom themselves when passThroughViews is on).
+    this.registerEvent(
+      this.app.workspace.on('active-leaf-change', () => {
+        this.hookActivePdf();
+        this.updateStatusBar();
+      })
+    );
 
     // Command palette entries (also assignable to hotkeys).
     this.addCommand({
@@ -116,12 +130,75 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
   }
 
   onunload() {
+    this._alive = false;
     if (this._saveTimer) {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
     }
+    for (const { bus, handler } of this._pdfBusListeners) {
+      try {
+        bus.off('scalechanging', handler);
+      } catch (e) {
+        /* viewer already torn down */
+      }
+    }
+    this._pdfBusListeners = [];
     // The wheel/click listeners are removed automatically (registerDomEvent).
     // Leave the current zoom as-is so the user's choice persists.
+  }
+
+  // ---- PDF viewer integration -------------------------------------------
+  // The built-in PDF viewer (pdf.js) zooms itself when passThroughViews is
+  // on, so the status bar mirrors its zoom while a PDF is the active view.
+  // These touch undocumented Obsidian internals, so every access is optional
+  // and failure just falls back to showing the app zoom only.
+
+  // Returns Obsidian's wrapper around the pdf.js viewer for the active PDF
+  // view, or null.
+  getActivePdfViewer() {
+    const view = this.app.workspace.activeLeaf?.view;
+    if (!view || typeof view.getViewType !== 'function' || view.getViewType() !== 'pdf') {
+      return null;
+    }
+    return view.viewer?.child?.pdfViewer ?? null;
+  }
+
+  getActivePdfScale() {
+    const scale = this.getActivePdfViewer()?.pdfViewer?.currentScale;
+    return typeof scale === 'number' && isFinite(scale) ? scale : null;
+  }
+
+  // Subscribe to the active PDF's scale changes so the indicator updates
+  // live. The pdf.js viewer loads asynchronously, so retry briefly when the
+  // event bus isn't there yet.
+  hookActivePdf(attempt = 0) {
+    if (!this._alive) return;
+    const obsViewer = this.getActivePdfViewer();
+    if (!obsViewer) return;
+    const bus = obsViewer.eventBus;
+    if (!bus || typeof bus.on !== 'function') {
+      if (attempt < 8) setTimeout(() => this.hookActivePdf(attempt + 1), 400);
+      return;
+    }
+    if (this._hookedPdfBuses.has(bus)) return;
+    this._hookedPdfBuses.add(bus);
+    const handler = () => this.updateStatusBar();
+    bus.on('scalechanging', handler);
+    this._pdfBusListeners.push({ bus, handler });
+  }
+
+  // Status-bar click: reset the app zoom and, if a PDF is active, its own
+  // zoom as well.
+  resetAllZoom() {
+    const raw = this.getActivePdfViewer()?.pdfViewer;
+    if (raw && typeof raw.currentScale === 'number') {
+      try {
+        raw.currentScaleValue = '1';
+      } catch (e) {
+        /* leave the PDF zoom alone if internals changed */
+      }
+    }
+    this.setZoom(1.0);
   }
 
   // Global Ctrl+wheel handler. Capture phase + non-passive so we can stop
@@ -241,11 +318,23 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     if (!this.statusEl) return;
     const visible = this.settings.showStatusBar && !!this.webFrame;
     this.statusEl.toggleClass('ctrl-scroll-zoom-hidden', !visible);
-    if (visible) {
-      const pct = Math.round(this.webFrame.getZoomFactor() * 100);
-      this.statusEl.setText('🔍 ' + pct + '%');
-    } else {
+    if (!visible) {
       this.statusEl.setText('');
+      return;
+    }
+    const appPct = Math.round(this.webFrame.getZoomFactor() * 100);
+    const pdfScale = this.getActivePdfScale();
+    if (pdfScale !== null) {
+      const pdfPct = Math.round(pdfScale * 100);
+      this.statusEl.setText(
+        appPct === 100
+          ? '🔍 PDF ' + pdfPct + '%'
+          : '🔍 ' + appPct + '% | PDF ' + pdfPct + '%'
+      );
+      this.statusEl.setAttribute('aria-label', 'Click to reset zoom (app and PDF) to 100%');
+    } else {
+      this.statusEl.setText('🔍 ' + appPct + '%');
+      this.statusEl.setAttribute('aria-label', 'Click to reset zoom to 100%');
     }
   }
 
