@@ -10,11 +10,15 @@ Unlike image-only zoom plugins, this scales the entire app — UI and note text 
 
 ## Features
 
-- Smooth Ctrl+wheel zoom anywhere in the app (editor, sidebars, panes).
-- Zoom level **persists across restarts**.
+- Smooth Ctrl+wheel zoom anywhere in the app (editor, sidebars, panes, **pop-out windows**).
+- **Multiplicative zoom steps** — each notch scales by the same ratio (e.g. ×1.1), so zooming feels consistent at 50% and at 300%.
+- **Smooth trackpad pinch** — pinch deltas zoom proportionally instead of jumping a full step per event.
+- **Plays nice with Canvas, Excalidraw and the PDF viewer** — Ctrl+scroll over these keeps their own canvas zoom (can be turned off in settings).
+- Choice of **modifier key**: Ctrl, Cmd/Win, or Alt/Option.
+- Zoom level **persists across restarts**, and the indicator stays in sync with Obsidian's built-in `Ctrl +` / `Ctrl -` zoom.
 - Status-bar indicator showing the current zoom %; **click it to reset to 100%**.
 - Command-palette commands: **Zoom in**, **Zoom out**, **Reset zoom to 100%** (assignable to hotkeys).
-- Settings for zoom step and min/max limits, plus an option to hide the status-bar indicator.
+- Slider settings for zoom step and min/max limits, plus an option to hide the status-bar indicator.
 
 ## Installation
 
