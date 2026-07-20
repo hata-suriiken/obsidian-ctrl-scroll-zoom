@@ -9,10 +9,22 @@
 /* "Note content only" zoom target: scale just the open note (editor and
    reading view); the ribbon, sidebars and tab bar stay at 100%. Obsidian
    mirrors this stylesheet into pop-out windows.
-   Strict child chains on purpose: CSS zoom compounds on nested elements, so
-   descendant selectors would double-zoom embeds (![[note]]), table-cell
-   editors and Canvas cards, which all nest their own markdown renderers. */
-body.csz-content-zoom .view-content > .markdown-preview-view,
-body.csz-content-zoom .view-content > .markdown-source-view > .cm-editor > .cm-scroller > .cm-sizer {
+   Descendant selectors on purpose — the reading view sits behind wrapper
+   elements (.markdown-reading-view), so strict child chains miss it. */
+body.csz-content-zoom .view-content .markdown-preview-view,
+body.csz-content-zoom .view-content .markdown-source-view .cm-sizer {
   zoom: var(--csz-zoom, 1);
+}
+
+/* CSS zoom compounds when renderers nest, so neutralize inner renderers
+   (embeds via ![[note]], table-cell editors) and views that already have
+   their own spatial zoom (Canvas cards). These come later and are more
+   specific, so they win over the rule above. */
+body.csz-content-zoom .view-content .markdown-preview-view .markdown-preview-view,
+body.csz-content-zoom .view-content .markdown-preview-view .cm-sizer,
+body.csz-content-zoom .view-content .cm-sizer .markdown-preview-view,
+body.csz-content-zoom .view-content .cm-sizer .cm-sizer,
+body.csz-content-zoom .view-content .canvas-wrapper .markdown-preview-view,
+body.csz-content-zoom .view-content .canvas-wrapper .cm-sizer {
+  zoom: 1;
 }

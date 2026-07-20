@@ -14,7 +14,7 @@ Unlike image-only zoom plugins, this scales the entire app — UI and note text 
 - **Two zoom targets** (Settings → Zoom target): **Whole app** (default — UI included, like a browser) or **Note content only** — the ribbon, sidebars and tab bar stay at 100% and only the open note scales. Content zoom is frame-throttled and **anchored to the mouse cursor**, so the spot you point at stays put while you zoom.
 - **Multiplicative zoom steps** — each notch scales by the same ratio (e.g. ×1.1), so zooming feels consistent at 50% and at 300%.
 - **Smooth trackpad pinch** — pinch deltas zoom proportionally instead of jumping a full step per event.
-- **Plays nice with Canvas, Excalidraw and the PDF viewer** — Ctrl+scroll over these keeps their own canvas zoom (can be turned off in settings).
+- **Plays nice with Canvas and Excalidraw** — Ctrl+scroll over these keeps their own spatial zoom (can be turned off in settings). PDFs zoom themselves in Note content mode; in Whole app mode the app zoom applies above PDFs too.
 - **PDF-aware indicator** — while a PDF is the active view, the status bar shows the PDF's own zoom (e.g. `🔍 PDF 80%`) and clicking it resets the PDF to 100% too.
 - Choice of **modifier key**: Ctrl, Cmd/Win, or Alt/Option.
 - Zoom level **persists across restarts**, and the indicator stays in sync with Obsidian's built-in `Ctrl +` / `Ctrl -` zoom.

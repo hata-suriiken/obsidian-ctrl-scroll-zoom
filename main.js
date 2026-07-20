@@ -22,13 +22,19 @@ const DEFAULT_SETTINGS = {
   zoomFactor: 1.0, // last applied zoom, restored on load
 };
 
-// Views that implement their own Ctrl+wheel zoom; when passThroughViews is on,
-// wheel events originating inside these are left alone.
-const PASS_THROUGH_SELECTOR = [
+// Views with their own spatial Ctrl+wheel zoom; when passThroughViews is on,
+// wheel events originating inside these are always left alone.
+const PASS_THROUGH_CANVAS = [
   '.canvas-wrapper', // core Canvas
   '.excalidraw-wrapper', // Excalidraw plugin
   '.excalidraw',
-  '.pdf-container', // built-in PDF viewer
+].join(', ');
+
+// The built-in PDF viewer zooms itself with Ctrl+wheel. In content mode the
+// PDF *is* the open content, so its own zoom is the right one; in whole-app
+// mode the app zoom takes over even above PDFs.
+const PASS_THROUGH_PDF = [
+  '.pdf-container',
   '.pdf-viewer-container',
   '.pdf-embed',
 ].join(', ');
@@ -244,12 +250,13 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     const content = this.settings.zoomTarget === 'content';
     if (!content && !this.webFrame) return;
     if (evt.deltaY === 0) return;
-    if (
-      this.settings.passThroughViews &&
-      evt.target instanceof Element &&
-      evt.target.closest(PASS_THROUGH_SELECTOR)
-    ) {
-      return; // let Canvas/Excalidraw/PDF zoom themselves
+    if (this.settings.passThroughViews && evt.target instanceof Element) {
+      if (evt.target.closest(PASS_THROUGH_CANVAS)) {
+        return; // Canvas/Excalidraw zoom themselves in both modes
+      }
+      if (content && evt.target.closest(PASS_THROUGH_PDF)) {
+        return; // content mode: the PDF is the content, let it zoom itself
+      }
     }
     evt.preventDefault();
     evt.stopPropagation();
@@ -571,10 +578,12 @@ class CtrlScrollZoomSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Maximum zoom')
-      .setDesc('Upper bound, in percent (cannot go below the minimum).')
+      .setDesc(
+        'Upper bound, in percent (cannot go below the minimum). Note: in Whole app mode the runtime caps the effective zoom around 500%; Note content mode can use the full range.'
+      )
       .addSlider((s) =>
         s
-          .setLimits(100, 500, 10)
+          .setLimits(100, 1000, 10)
           .setValue(Math.round(this.plugin.settings.maxZoom * 100))
           .setDynamicTooltip()
           .onChange(async (v) => {
@@ -602,9 +611,9 @@ class CtrlScrollZoomSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName('Let Canvas, Excalidraw and PDFs zoom themselves')
+      .setName('Let Canvas and Excalidraw zoom themselves')
       .setDesc(
-        'These views have their own Ctrl+scroll zoom. When enabled, scrolling over them keeps that behavior instead of zooming the whole app.'
+        'These views have their own spatial Ctrl+scroll zoom and are left alone when enabled. PDFs use their own zoom only in Note content mode; in Whole app mode the app zoom applies above PDFs too.'
       )
       .addToggle((tg) =>
         tg.setValue(this.plugin.settings.passThroughViews).onChange(async (v) => {
