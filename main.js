@@ -12,6 +12,7 @@
 const { Plugin, PluginSettingTab, Setting } = require('obsidian');
 
 const DEFAULT_SETTINGS = {
+  zoomTarget: 'app', // 'app' (webFrame, zooms all UI) | 'content' (CSS zoom, note only)
   step: 0.1, // zoom change per wheel notch, applied multiplicatively (0.1 = ×1.1)
   minZoom: 0.3, // lower clamp for the zoom factor
   maxZoom: 5.0, // upper clamp for the zoom factor
@@ -59,17 +60,22 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
   async onload() {
     this.webFrame = getWebFrame();
     this._attachedWindows = new WeakSet();
+    this._windows = new Set(); // iterable window list for content-mode rendering
     this._gestureZoom = null;
     this._gestureTime = 0;
     this._alive = true;
     this._hookedPdfBuses = new WeakSet();
     this._pdfBusListeners = [];
+    this._anchor = null;
+    this._anchorTime = 0;
+    this._anchorTimer = null;
+    this._contentRaf = null;
+    this._pendingContent = null;
     await this.loadSettings();
 
-    // Restore the zoom factor from the previous session.
-    if (this.webFrame) {
-      this.applyZoom(this.clamp(this.settings.zoomFactor));
-    }
+    // Restore the zoom from the previous session onto the chosen target.
+    this._windows.add(window);
+    this.restoreZoom();
 
     // Status bar indicator (click to reset to 100%).
     this.statusEl = this.addStatusBarItem();
@@ -135,6 +141,22 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
       clearTimeout(this._saveTimer);
       this._saveTimer = null;
     }
+    if (this._contentRaf != null) {
+      cancelAnimationFrame(this._contentRaf);
+      this._contentRaf = null;
+    }
+    clearTimeout(this._anchorTimer);
+    // Remove the content-zoom class/variable; the styles.css rule disappears
+    // with the plugin anyway, this just keeps the DOM clean.
+    for (const win of this._windows) {
+      if (win.closed) continue;
+      const body = win.document && win.document.body;
+      if (body) {
+        body.classList.remove('csz-content-zoom');
+        body.style.removeProperty('--csz-zoom');
+      }
+    }
+    this._windows.clear();
     for (const { bus, handler } of this._pdfBusListeners) {
       try {
         bus.off('scalechanging', handler);
@@ -206,6 +228,9 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
   attachToWindow(win) {
     if (!win || this._attachedWindows.has(win)) return;
     this._attachedWindows.add(win);
+    this._windows.add(win);
+    // A pop-out opened while zoomed in content mode starts at the saved zoom.
+    if (this.settings.zoomTarget === 'content') this.applyContentToWindow(win);
     this.registerDomEvent(
       win,
       'wheel',
@@ -216,7 +241,8 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
 
   onWheel(evt) {
     if (!this.modifierHeld(evt)) return;
-    if (!this.webFrame) return;
+    const content = this.settings.zoomTarget === 'content';
+    if (!content && !this.webFrame) return;
     if (evt.deltaY === 0) return;
     if (
       this.settings.passThroughViews &&
@@ -227,7 +253,22 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     }
     evt.preventDefault();
     evt.stopPropagation();
+    if (content) this.trackWheelAnchor(evt);
     this.changeZoomSteps(-this.wheelSteps(evt), true);
+  }
+
+  // Content mode: keep the point under the cursor stationary for the duration
+  // of one wheel session (consecutive events; a pause starts a new session).
+  trackWheelAnchor(evt) {
+    const now = Date.now();
+    if (!this._anchor || now - this._anchorTime > GESTURE_TIMEOUT_MS) {
+      this._anchor = this.beginAnchor(evt.target, evt.clientY);
+    }
+    this._anchorTime = now;
+    clearTimeout(this._anchorTimer);
+    this._anchorTimer = setTimeout(() => {
+      this._anchor = null;
+    }, GESTURE_TIMEOUT_MS + 50);
   }
 
   modifierHeld(evt) {
@@ -271,7 +312,107 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
   }
 
   getZoom() {
+    if (this.settings.zoomTarget === 'content') return this.settings.zoomFactor;
     return this.webFrame ? this.webFrame.getZoomFactor() : this.settings.zoomFactor;
+  }
+
+  restoreZoom() {
+    const z = this.clamp(this.settings.zoomFactor);
+    if (this.settings.zoomTarget === 'content') {
+      this.renderContentZoom(z);
+    } else if (this.webFrame) {
+      this.applyZoom(z);
+    }
+  }
+
+  // ---- content-mode rendering --------------------------------------------
+  // Content mode zooms only the open note (editor .cm-sizer / reading view)
+  // via a CSS variable; the ribbon, sidebars and tab bar stay at 100%. The
+  // rule lives in styles.css so Obsidian mirrors it into pop-out windows.
+
+  applyContentToWindow(win, z = this.settings.zoomFactor) {
+    const body = win.document && win.document.body;
+    if (!body) return;
+    body.classList.add('csz-content-zoom');
+    body.style.setProperty('--csz-zoom', String(z));
+  }
+
+  renderContentZoom(z) {
+    for (const win of this._windows) {
+      if (win.closed) {
+        this._windows.delete(win);
+        continue;
+      }
+      this.applyContentToWindow(win, z);
+    }
+    if (this._anchor) this.applyAnchor(this._anchor, z);
+  }
+
+  // CSS zoom re-lays the note out, so coalesce rapid wheel events into one
+  // application per animation frame to keep the gesture smooth.
+  requestContentApply(z) {
+    this._pendingContent = z;
+    if (this._contentRaf != null) return;
+    this._contentRaf = requestAnimationFrame(() => {
+      this._contentRaf = null;
+      if (this._pendingContent != null) {
+        this.renderContentZoom(this._pendingContent);
+        this._pendingContent = null;
+      }
+    });
+  }
+
+  // ---- scroll anchoring (content mode) -------------------------------------
+
+  // The scrollable note container at/under the gesture, or in the active view.
+  // Only the zoomed pane's own scroller qualifies — embeds and hover popovers
+  // contain nested .markdown-preview-view elements that are not scrollable
+  // (or not zoomed at all), so anchoring to them would drift or scroll the
+  // wrong element.
+  findScroller(target) {
+    let el = target instanceof Element ? target : null;
+    while (el) {
+      const hit = el.closest('.cm-scroller, .markdown-preview-view');
+      if (!hit) break;
+      if (hit.closest('.view-content') && !hit.closest('.markdown-embed')) return hit;
+      el = hit.parentElement;
+    }
+    const leaf = this.app.workspace.getMostRecentLeaf();
+    const contentEl = leaf && leaf.view && leaf.view.contentEl;
+    return contentEl ? contentEl.querySelector('.cm-scroller, .markdown-preview-view') : null;
+  }
+
+  beginAnchor(target, clientY) {
+    const scroller = this.findScroller(target);
+    if (!scroller) return null;
+    return {
+      scroller,
+      offsetY: clientY - scroller.getBoundingClientRect().top,
+      startZoom: this.settings.zoomFactor,
+      startScroll: scroller.scrollTop,
+      // The reading view zooms the scroller itself, so its scroll coordinates
+      // live in the zoomed space; the editor zooms a child (.cm-sizer).
+      zoomedScroller: scroller.classList.contains('markdown-preview-view'),
+    };
+  }
+
+  applyAnchor(anchor, z) {
+    const { scroller, offsetY, startZoom, startScroll, zoomedScroller } = anchor;
+    scroller.scrollTop = zoomedScroller
+      ? startScroll + offsetY / startZoom - offsetY / z
+      : (startScroll + offsetY) * (z / startZoom) - offsetY;
+  }
+
+  // Commands/reset in content mode: keep the middle of the note stationary.
+  anchorViewportCenter() {
+    const scroller = this.findScroller(null);
+    if (!scroller) return;
+    const rect = scroller.getBoundingClientRect();
+    this._anchor = this.beginAnchor(scroller, rect.top + rect.height / 2);
+    clearTimeout(this._anchorTimer);
+    this._anchorTimer = setTimeout(() => {
+      this._anchor = null;
+    }, GESTURE_TIMEOUT_MS + 50);
   }
 
   // Change the zoom by n steps (fractional during a pinch). Multiplicative:
@@ -297,15 +438,28 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
   setZoom(z) {
     // Round what we apply/persist to 1/10000 so saved values stay clean.
     const clamped = Math.round(this.clamp(z) * 10000) / 10000;
-    this.applyZoom(clamped);
+    // Content mode: without an anchor, changing the zoom leaves scrollTop
+    // pointing at a different part of the note (it is measured in zoomed
+    // pixels), so commands/reset anchor the viewport center. Must run before
+    // zoomFactor changes — the anchor captures the current zoom and scroll.
+    if (this.settings.zoomTarget === 'content' && this._anchor == null) {
+      this.anchorViewportCenter();
+    }
     this.settings.zoomFactor = clamped;
+    if (this.settings.zoomTarget === 'content') {
+      this.requestContentApply(clamped);
+    } else {
+      this.applyZoom(clamped);
+    }
     this.updateStatusBar();
     this.debouncedSave();
   }
 
   // Pick up zoom changes made outside this plugin (built-in Ctrl+= / Ctrl+-).
+  // Only meaningful for the app target — in content mode the webFrame factor
+  // is not ours to track and must not overwrite the saved content zoom.
   syncFromWebFrame() {
-    if (!this.webFrame) return;
+    if (!this.webFrame || this.settings.zoomTarget !== 'app') return;
     const cur = Math.round(this.webFrame.getZoomFactor() * 10000) / 10000;
     if (cur !== this.settings.zoomFactor) {
       this.settings.zoomFactor = cur;
@@ -316,13 +470,15 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
 
   updateStatusBar() {
     if (!this.statusEl) return;
-    const visible = this.settings.showStatusBar && !!this.webFrame;
+    const visible =
+      this.settings.showStatusBar &&
+      (!!this.webFrame || this.settings.zoomTarget === 'content');
     this.statusEl.toggleClass('ctrl-scroll-zoom-hidden', !visible);
     if (!visible) {
       this.statusEl.setText('');
       return;
     }
-    const appPct = Math.round(this.webFrame.getZoomFactor() * 100);
+    const appPct = Math.round(this.getZoom() * 100);
     const pdfScale = this.getActivePdfScale();
     if (pdfScale !== null) {
       const pdfPct = Math.round(pdfScale * 100);
@@ -364,6 +520,25 @@ class CtrlScrollZoomSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+
+    new Setting(containerEl)
+      .setName('Zoom target')
+      .setDesc(
+        'Whole app zooms everything (UI included), like a browser. Note content only keeps the ribbon, sidebars and tab bar at 100% and zooms just the open note; PDFs keep their own built-in Ctrl+scroll zoom there. Switching resets the zoom to 100%.'
+      )
+      .addDropdown((d) =>
+        d
+          .addOption('app', 'Whole app')
+          .addOption('content', 'Note content only')
+          .setValue(this.plugin.settings.zoomTarget)
+          .onChange(async (v) => {
+            if (v === this.plugin.settings.zoomTarget) return;
+            this.plugin.setZoom(1.0); // reset the old target before switching
+            this.plugin.settings.zoomTarget = v;
+            this.plugin.setZoom(1.0); // render the new target at 100%
+            await this.plugin.saveSettings();
+          })
+      );
 
     new Setting(containerEl)
       .setName('Zoom step')

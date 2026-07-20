@@ -11,6 +11,7 @@ Unlike image-only zoom plugins, this scales the entire app — UI and note text 
 ## Features
 
 - Smooth Ctrl+wheel zoom anywhere in the app (editor, sidebars, panes, **pop-out windows**).
+- **Two zoom targets** (Settings → Zoom target): **Whole app** (default — UI included, like a browser) or **Note content only** — the ribbon, sidebars and tab bar stay at 100% and only the open note scales. Content zoom is frame-throttled and **anchored to the mouse cursor**, so the spot you point at stays put while you zoom.
 - **Multiplicative zoom steps** — each notch scales by the same ratio (e.g. ×1.1), so zooming feels consistent at 50% and at 300%.
 - **Smooth trackpad pinch** — pinch deltas zoom proportionally instead of jumping a full step per event.
 - **Plays nice with Canvas, Excalidraw and the PDF viewer** — Ctrl+scroll over these keeps their own canvas zoom (can be turned off in settings).
@@ -48,6 +49,7 @@ The plugin listens for `wheel` events carrying the Ctrl modifier and adjusts the
 ## Notes
 
 - This affects only the Obsidian window, not other applications.
+- In **Note content only** mode the editor uses CSS `zoom`, so the in-editor cursor may sit slightly off at non-100% zoom (same caveat as the mobile companion plugin); the reading view is unaffected. PDFs keep their own built-in Ctrl+scroll zoom in this mode.
 - It coexists with Obsidian's built-in `Ctrl +` / `Ctrl -` zoom.
 - If you use *Mousewheel Image Zoom* with Ctrl as its modifier, the two may overlap while hovering an image; change one of the modifiers to avoid this.
 
