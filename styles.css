@@ -33,6 +33,16 @@ body.csz-content-zoom.csz-zoom-figures .view-content .cm-sizer .image-embed img 
   max-width: calc(100% * var(--csz-zoom, 1));
 }
 
+/* Live Preview (Obsidian 1.14+) wraps the image and pins it with
+   width: 100%, which a raised max-width cannot exceed — the figure could
+   shrink but never grow. width: auto restores natural sizing (identical
+   at 100%: min(natural, pane) both ways) and lets the cap above take over
+   when zoomed in. Drag-resized images carry a width attribute and keep it. */
+body.csz-content-zoom.csz-zoom-figures .view-content .markdown-preview-view .image-embed .image-wrapper img:not([width]),
+body.csz-content-zoom.csz-zoom-figures .view-content .cm-sizer .image-embed .image-wrapper img:not([width]) {
+  width: auto;
+}
+
 /* CSS zoom compounds when renderers nest, so neutralize inner renderers
    (embeds via ![[note]], table-cell editors) and views that already have
    their own spatial zoom (Canvas cards). These come later and are more
