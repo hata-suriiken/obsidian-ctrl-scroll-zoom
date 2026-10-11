@@ -1,9 +1,9 @@
 {
   "id": "ctrl-scroll-zoom",
   "name": "Ctrl+Scroll Zoom",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "minAppVersion": "1.4.0",
-  "description": "Zoom the whole app in and out with Ctrl + mouse wheel (scroll up to zoom in, down to zoom out), like a browser. Trackpad pinch-to-zoom works too.",
+  "description": "Zoom in and out with Ctrl + mouse wheel, like a browser. By default only the note content zooms (text and images; UI stays at 100%); a whole-app mode is available. Trackpad pinch-to-zoom works too.",
   "author": "hata-suriiken",
   "authorUrl": "https://github.com/hata-suriiken",
   "isDesktopOnly": true

@@ -1,17 +1,17 @@
 # Ctrl+Scroll Zoom
 
-Zoom the **whole Obsidian window** in and out with **Ctrl + mouse wheel**, just like a web browser or VS Code.
+Zoom your notes in and out with **Ctrl + mouse wheel**, just like a web browser or VS Code.
 
 - **Ctrl + wheel up** → zoom in
 - **Ctrl + wheel down** → zoom out
 - **Trackpad pinch-to-zoom** also works (the browser reports a pinch as a Ctrl+wheel event).
 
-Unlike image-only zoom plugins, this scales the entire app — UI and note text together — using Electron's page zoom.
+Unlike image-only zoom plugins, this scales the whole note — text, images and diagrams together. By default only the **note content** zooms while the ribbon, sidebars and tab bar stay at 100%; a **Whole app** mode (Electron page zoom, UI included) is available in settings.
 
 ## Features
 
 - Smooth Ctrl+wheel zoom anywhere in the app (editor, sidebars, panes, **pop-out windows**).
-- **Two zoom targets** (Settings → Zoom target): **Whole app** (default — UI included, like a browser) or **Note content only** — the ribbon, sidebars and tab bar stay at 100% and only the open note scales. Content zoom is frame-throttled and **anchored to the mouse cursor**, so the spot you point at stays put while you zoom.
+- **Two zoom targets** (Settings → Zoom target): **Note content only** (default since v1.4.0) — the ribbon, sidebars and tab bar stay at 100% and only the open note scales (text and images together) — or **Whole app** (UI included, like a browser). Content zoom is frame-throttled and **anchored to the mouse cursor**, so the spot you point at stays put while you zoom.
 - **Multiplicative zoom steps** — each notch scales by the same ratio (e.g. ×1.1), so zooming feels consistent at 50% and at 300%.
 - **Smooth trackpad pinch** — pinch deltas zoom proportionally instead of jumping a full step per event.
 - **Plays nice with Canvas and Excalidraw** — Ctrl+scroll over these keeps their own spatial zoom (can be turned off in settings). PDFs zoom themselves in Note content mode; in Whole app mode the app zoom applies above PDFs too.
@@ -44,7 +44,9 @@ Hold **Ctrl** and scroll the mouse wheel: up to enlarge, down to shrink. You can
 
 ## How it works
 
-The plugin listens for `wheel` events carrying the Ctrl modifier and adjusts the Electron renderer's zoom factor via `webFrame.setZoomFactor`. Because it relies on Electron, it is **desktop-only**.
+The plugin listens for `wheel` events carrying the Ctrl modifier. In the default **Note content only** mode it scales the open note with CSS `zoom`; in **Whole app** mode it adjusts the Electron renderer's zoom factor via `webFrame.setZoomFactor`. It is **desktop-only** (mobile has the companion plugin below).
+
+> Upgrading from ≤ 1.3.x: the default zoom target changed from Whole app to Note content only, and existing installs are migrated once. If you prefer the old behavior, set Settings → Zoom target back to **Whole app**.
 
 ## Notes
 
