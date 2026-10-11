@@ -16,6 +16,23 @@ body.csz-content-zoom .view-content .markdown-source-view .cm-sizer {
   zoom: var(--csz-zoom, 1);
 }
 
+/* Figure breakout (v1.5.0): images carry max-width: 100%, so a figure that
+   already fills the line/pane cannot get any bigger when the note zooms in —
+   the text grows but the figure sits at its cap. With figure zoom enabled,
+   raise the cap by the zoom factor so the image keeps growing, and let its
+   embed scroll sideways to pan the part that leaves the pane. At 100% the
+   cap equals the normal one, so the layout is unchanged. */
+body.csz-content-zoom.csz-zoom-figures .view-content .markdown-preview-view .image-embed,
+body.csz-content-zoom.csz-zoom-figures .view-content .cm-sizer .image-embed {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+body.csz-content-zoom.csz-zoom-figures .view-content .markdown-preview-view .image-embed img,
+body.csz-content-zoom.csz-zoom-figures .view-content .cm-sizer .image-embed img {
+  max-width: calc(100% * var(--csz-zoom, 1));
+}
+
 /* CSS zoom compounds when renderers nest, so neutralize inner renderers
    (embeds via ![[note]], table-cell editors) and views that already have
    their own spatial zoom (Canvas cards). These come later and are more

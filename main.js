@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   maxZoom: 5.0, // upper clamp for the zoom factor
   modifier: 'ctrl', // 'ctrl' | 'meta' | 'alt'
   passThroughViews: true, // let Canvas/Excalidraw/PDF keep their own Ctrl+wheel zoom
+  zoomFigures: true, // content mode: let images grow past the pane edge (pan to see the rest)
   showStatusBar: true,
   zoomFactor: 1.0, // last applied zoom, restored on load
 };
@@ -162,6 +163,7 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
       const body = win.document && win.document.body;
       if (body) {
         body.classList.remove('csz-content-zoom');
+        body.classList.remove('csz-zoom-figures');
         body.style.removeProperty('--csz-zoom');
       }
     }
@@ -351,6 +353,7 @@ module.exports = class CtrlScrollZoomPlugin extends Plugin {
     const body = win.document && win.document.body;
     if (!body) return;
     body.classList.add('csz-content-zoom');
+    body.classList.toggle('csz-zoom-figures', !!this.settings.zoomFigures);
     body.style.setProperty('--csz-zoom', String(z));
   }
 
@@ -639,6 +642,21 @@ class CtrlScrollZoomSettingTab extends PluginSettingTab {
         tg.setValue(this.plugin.settings.passThroughViews).onChange(async (v) => {
           this.plugin.settings.passThroughViews = v;
           await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName('Let figures grow past the pane edge')
+      .setDesc(
+        'Note content mode only. Images normally stop growing once they fill the pane; with this on they keep scaling with the zoom and can be panned with the scrollbar under the figure. At 100% nothing changes.'
+      )
+      .addToggle((tg) =>
+        tg.setValue(this.plugin.settings.zoomFigures).onChange(async (v) => {
+          this.plugin.settings.zoomFigures = v;
+          await this.plugin.saveSettings();
+          if (this.plugin.settings.zoomTarget === 'content') {
+            this.plugin.renderContentZoom(this.plugin.settings.zoomFactor);
+          }
         })
       );
 

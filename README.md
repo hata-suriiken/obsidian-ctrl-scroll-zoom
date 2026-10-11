@@ -12,6 +12,7 @@ Unlike image-only zoom plugins, this scales the whole note — text, images and 
 
 - Smooth Ctrl+wheel zoom anywhere in the app (editor, sidebars, panes, **pop-out windows**).
 - **Two zoom targets** (Settings → Zoom target): **Note content only** (default since v1.4.0) — the ribbon, sidebars and tab bar stay at 100% and only the open note scales (text and images together) — or **Whole app** (UI included, like a browser). Content zoom is frame-throttled and **anchored to the mouse cursor**, so the spot you point at stays put while you zoom.
+- **Figures keep growing** (v1.5.0, content mode) — images normally stop at the pane edge (`max-width: 100%`), so a full-width figure would not get any bigger while the text grows. Now figures keep scaling with the zoom past the pane edge; pan them with the scrollbar under the figure (can be turned off in settings).
 - **Multiplicative zoom steps** — each notch scales by the same ratio (e.g. ×1.1), so zooming feels consistent at 50% and at 300%.
 - **Smooth trackpad pinch** — pinch deltas zoom proportionally instead of jumping a full step per event.
 - **Plays nice with Canvas and Excalidraw** — Ctrl+scroll over these keeps their own spatial zoom (can be turned off in settings). PDFs zoom themselves in Note content mode; in Whole app mode the app zoom applies above PDFs too.
